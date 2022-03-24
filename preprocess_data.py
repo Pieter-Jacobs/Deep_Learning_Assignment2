@@ -54,3 +54,9 @@ def annotate_bars(plot):
         for p in ax.patches[2:7:2]:
             ax.annotate(text=p.get_width(), xy=(
                 p.get_width() + 1, p.get_y() + p.get_height()/2))
+
+def create_fields():
+    pass
+
+def tokenize(example):
+    return tokenizer(example['OriginalTweet'], padding='max_length')
