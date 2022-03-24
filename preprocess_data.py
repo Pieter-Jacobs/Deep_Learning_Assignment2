@@ -38,7 +38,7 @@ def compute_embeddings(texts):
     pca = PCA(n_components = 2)
     embeddings = []
     sentenceTransformer = SentenceTransformer(
-        'paraphrase-distilroberta-base-v1')
+        'all-mpnet-base-v2')
     for text in texts:
         embedding = np.zeros(768)
         for sentence in tokenize.sent_tokenize(text):
