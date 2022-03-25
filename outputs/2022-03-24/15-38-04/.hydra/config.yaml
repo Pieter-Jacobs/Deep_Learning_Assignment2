@@ -1,0 +1,4 @@
+n_epochs: 5
+batch_size: 32
+lr: 2.0e-05
+eps: 1.0e-08

@@ -2,11 +2,15 @@ from imports import *
 import numpy as np
 
 
+tokenizer = transformers.AutoTokenizer.from_pretrained('bert-base-cased')
+
 def load_data():
     print("Loading dataset...")
     dataset_split = datasets.load_dataset('tweet_eval', 'sentiment')
+    dataset_split = dataset_split.map(tokenize, batched=True)
     dataset_full = datasets.concatenate_datasets(list(dataset_split.values()))
     train, test, val = list(dataset_split.values())
+    print(train['label'])
     return dataset_full, train, test, val
 
 def extract_labels(dataset):
@@ -59,4 +63,4 @@ def create_fields():
     pass
 
 def tokenize(example):
-    return tokenizer(example['OriginalTweet'], padding='max_length')
+    return tokenizer(example['text'], padding='max_length')

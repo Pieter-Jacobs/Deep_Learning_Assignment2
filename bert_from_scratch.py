@@ -3,7 +3,6 @@ import numpy as np
 
 def load_untrained_bert():
     config = transformers.AutoConfig.from_pretrained('bert-base-uncased')
-    tokenizer = transformers.AutoTokenizer.from_pretrained('bert-base-cased')
     model = transformers.AutoModel.from_config(config)
     return model
 
