@@ -84,7 +84,6 @@ def training_step(model, dataloader, optimizer, device):
         batch = {k: v.to(device) for k, v in batch.items()}
         predictions = model(**batch)
         loss = predictions[0]
-        print(batch['labels'])
         acc = compute_accuracy(predictions[1], batch['labels'].long())
         loss.backward()
         optimizer.step()
