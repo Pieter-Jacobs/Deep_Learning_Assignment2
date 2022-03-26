@@ -10,31 +10,35 @@ torch.backends.cudnn.benchmark = False
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 
 
-def init_iterators(cfg, train_ds, val_ds, test_ds, device):
-    train_iterator = data.BucketIterator(
+def init_dataloaders(cfg, train_ds, val_ds, test_ds, device):
+    train_loader = torch.utils.data.DataLoader(
         dataset=train_ds,
-        batch_size=cfg.batch_size,
-        device=device
+        batch_size=cfg.batch_size
     )
-    val_iterator = data.BucketIterator(
+    val_loader = torch.utils.data.DataLoader(
         dataset=val_ds,
-        batch_size=cfg.batch_size,
-        device=device
+        batch_size=cfg.batch_size
     )
-    test_iterator = data.BucketIterator(
+    test_loader = torch.utils.data.DataLoader(
         dataset=test_ds,
-        batch_size=cfg.batch_size,
-        device=device
+        batch_size=cfg.batch_size
     )
-    return train_iterator, val_iterator, test_iterator
+    return train_loader, val_loader, test_loader
 
 
 @hydra.main(config_path=os.getcwd(), config_name="config.yaml")
 def main(cfg: DictConfig):
-    device = torch.device('cpu')
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     dataset, train_ds, test_ds, val_ds = preprocess.load_data()
     model = load_untrained_bert()
-    train_iterator, val_iterator, test_iterator = init_iterators(cfg, train_ds, test_ds, val_ds, device) 
+    train_dataloader, val_dataloader, test_dataloader = init_dataloaders(
+        cfg, train_ds, test_ds, val_ds, device)
+
+    model.to(device)
+    optimizer = torch.optim.AdamW(
+        params=model.parameters(), lr=cfg.lr, eps=cfg.eps)
+
+    train(model=model, optimizer=optimizer, cfg=cfg, train_dataloader=train_dataloader, val_dataloader=val_dataloader, device=device)
     # labels = extract_labels(val)
     # plot_hist(labels)
     # embeddings = compute_embeddings([ex['text'] for ex in list(val)])
