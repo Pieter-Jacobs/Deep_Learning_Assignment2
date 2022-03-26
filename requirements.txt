@@ -1,0 +1,13 @@
+datasets
+torch
+seaborn
+matplotlib
+sentence_transformers
+nltk
+sklearn
+transformers
+dill
+hydra
+omegaconf
+torchtext
+pandas
