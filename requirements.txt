@@ -7,7 +7,7 @@ nltk
 sklearn
 transformers
 dill
-hydra
+hydra-core
 omegaconf
 torchtext
 pandas
