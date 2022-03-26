@@ -7,7 +7,6 @@ tokenizer = transformers.AutoTokenizer.from_pretrained('bert-base-cased')
 def load_data():
     print("Loading dataset...")
     dataset_split = datasets.load_dataset('tweet_eval', 'sentiment')
-    print(dataset_split)
     dataset_split = dataset_split.map(tokenize, batched=True)
     dataset_split = dataset_split.map(lambda examples: {'labels': examples['label']}, batched=True)
     dataset_split.set_format(type='torch', columns=['input_ids', 'token_type_ids', 'attention_mask', 'labels'])

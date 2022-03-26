@@ -31,9 +31,9 @@ def main(cfg: DictConfig):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     dataset, train_ds, test_ds, val_ds = preprocess.load_data()
     model = load_untrained_bert()
+    model = load_trained_bert()
     train_dataloader, val_dataloader, test_dataloader = init_dataloaders(
         cfg, train_ds, test_ds, val_ds, device)
-
     model.to(device)
     optimizer = torch.optim.AdamW(
         params=model.parameters(), lr=cfg.lr, eps=cfg.eps)

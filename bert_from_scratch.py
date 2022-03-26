@@ -20,6 +20,15 @@ def load_untrained_bert():
     model = transformers.BertForSequenceClassification(config)
     return model
 
+def load_trained_bert():
+    model = transformers.BertForSequenceClassification.from_pretrained(
+        # Use the 12-layer BERT model, with an uncased vocab.
+        "bert-base-uncased",
+        num_labels=3,
+        output_attentions=False,
+        output_hidden_states=False,
+    )
+    return model
 
 def train(model, optimizer, cfg, train_dataloader, val_dataloader, device):
     """
@@ -29,7 +38,6 @@ def train(model, optimizer, cfg, train_dataloader, val_dataloader, device):
     """
     loss = []
     acc = []
-    epoch = 0
     val_losses = []
     print("Starting training...")
     for epoch in range(cfg.n_epochs):
@@ -45,7 +53,7 @@ def train(model, optimizer, cfg, train_dataloader, val_dataloader, device):
         print(
             f'\tTrain Loss: {train_loss:.3f} | Train Acc: {train_acc*100:.2f}%')
         print(
-            f'Val Loss: {val_loss:.3f} | Val Acc: {val_acc*100:.2f}%')
+            f'\tVal Loss: {val_loss:.3f} | Val Acc: {val_acc*100:.2f}%')
 
         loss.append(train_loss)
         acc.append(train_acc)
@@ -54,7 +62,7 @@ def train(model, optimizer, cfg, train_dataloader, val_dataloader, device):
         # Load the parameters of the model with the lowest validation loss
         model.load_state_dict(torch.load(
             f"{hydra.utils.get_original_cwd()}{os.path.sep}saves{os.path.sep}model_early_stopping_{str(epoch)}.pkl"))
-        optimizer.params = transformers.AdamW(
+        optimizer.params = torch.optim.AdamW(
             model.parameters(), lr=cfg.lr, eps=cfg.eps)
 
 
@@ -63,27 +71,26 @@ def training_step(model, dataloader, optimizer, device):
     Trains the model based on one pass through all data
     Returns:
     --------
-    epoch_acc / len(self.train_dataloader): float
+    average_acc / len(train_dataloader): float
         Average training accuracy over the different batches
-    epoch_loss / len(self.train_dataloader): float
+    epoch_loss / len(train_dataloader): float
         Average training loss over the different batches
     """
     epoch_loss = 0
-    epoch_acc = 0
+    average_acc = 0
     model.train()
     for i, batch in enumerate(dataloader):
-        if(i == 100):
-            break
         optimizer.zero_grad()
         batch = {k: v.to(device) for k, v in batch.items()}
         predictions = model(**batch)
         loss = predictions[0]
+        print(batch['labels'])
         acc = compute_accuracy(predictions[1], batch['labels'].long())
         loss.backward()
         optimizer.step()
         epoch_loss += float(loss.item())
-        epoch_acc += float(acc)
-    return epoch_acc / len(dataloader), epoch_loss / len(dataloader)
+        average_acc += float(acc)
+    return average_acc / len(dataloader), epoch_loss / len(dataloader)
 
 
 def validation_step(model, dataloader, device):
@@ -91,12 +98,12 @@ def validation_step(model, dataloader, device):
     Evaluates the performance of the model on the validation set
 
     Returns:
-    (epoch_acc / len(self.val_dataloader)): float
+    (average_acc / len(val_dataloader)): float
         Average validation accuracy over the different batches
-    (epoch_loss / len(self.val_dataloader)): float
+    (epoch_loss / len(val_dataloader)): float
         Average validation loss over the different batches
     """
-    epoch_acc = 0
+    average_acc = 0
     epoch_loss = 0
     model.eval()
     with torch.no_grad():
@@ -107,9 +114,9 @@ def validation_step(model, dataloader, device):
             predictions = model(**batch)
             loss = predictions[0]
             acc = compute_accuracy(predictions[1], batch['labels'].long())
-            epoch_acc += acc
+            average_acc += acc
             epoch_loss += float(loss.item())
-    return (epoch_acc / len(dataloader)), (epoch_loss / len(dataloader))
+    return (average_acc / len(dataloader)), (epoch_loss / len(dataloader))
 
 
 def compute_accuracy(predictions, y):
@@ -124,3 +131,34 @@ def compute_accuracy(predictions, y):
 
 def compute_f1():
     pass
+
+def evaluate(model, dataloader):
+    """
+    Makes evaluation steps corresponding to the amount of epochs and prints the loss and accuracy
+    Returns:
+    avg_loss: float
+        Average loss of the model predictions
+    """
+    model.eval()
+    average_acc = 0
+    average_loss = 0
+
+    with torch.no_grad():
+        for batch in dataloader:
+            predictions = model(batch.token_ids,
+                                        token_type_ids=None,
+                                        attention_mask=batch.mask,
+                                        labels=batch.label.long())
+            loss = predictions[0]
+            batch_acc = compute_accuracy(
+                predictions[1], batch.label.long())
+            average_acc += batch_acc
+            average_loss += float(loss.item())
+
+    f = open(f"{hydra.utils.get_original_cwd()}{os.path.sep}accuracy.txt", "a")
+    f.write(str(average_acc / len(dataloader)))
+    f.write(" ")
+    f.close()
+
+    return (average_acc / len(dataloader)), (average_loss / len(dataloader))
+
