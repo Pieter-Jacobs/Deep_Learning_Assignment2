@@ -7,6 +7,7 @@ tokenizer = transformers.AutoTokenizer.from_pretrained('bert-base-cased')
 def load_data():
     print("Loading dataset...")
     dataset_split = datasets.load_dataset('tweet_eval', 'sentiment')
+    print(dataset_split)
     dataset_split = dataset_split.map(tokenize, batched=True)
     dataset_split = dataset_split.map(lambda examples: {'labels': examples['label']}, batched=True)
     dataset_split.set_format(type='torch', columns=['input_ids', 'token_type_ids', 'attention_mask', 'labels'])
@@ -25,9 +26,8 @@ def plot_hist(y):
     g = sns.displot(y=y, discrete=True, legend=False,
                     shrink=0.8, palette=['g', 'y', 'r'], hue=y, linewidth=0)
     annotate_bars(g)
-    plt.show()
-    # plt.savefig(f"img{os.sep}class_distribution.pdf")
-    #plt.close()
+    plt.savefig(f"img{os.sep}class_distribution.pdf")
+    plt.close()
 
 def plot_scatter(X, y):
     """Plot a 2D scatterplot"""
