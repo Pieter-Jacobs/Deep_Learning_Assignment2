@@ -107,8 +107,6 @@ def validation_step(model, dataloader, device):
     model.eval()
     with torch.no_grad():
         for i, batch in enumerate(dataloader):
-            if(i == 50):
-                break
             batch = {k: v.to(device) for k, v in batch.items()}
             predictions = model(**batch)
             loss = predictions[0]
@@ -131,7 +129,7 @@ def compute_accuracy(predictions, y):
 def compute_f1():
     pass
 
-def evaluate(model, dataloader):
+def evaluate(model, dataloader, T):
     """
     Makes evaluation steps corresponding to the amount of epochs and prints the loss and accuracy
     Returns:
@@ -144,20 +142,20 @@ def evaluate(model, dataloader):
 
     with torch.no_grad():
         for batch in dataloader:
-            predictions = model(batch.token_ids,
-                                        token_type_ids=None,
-                                        attention_mask=batch.mask,
-                                        labels=batch.label.long())
-            loss = predictions[0]
-            batch_acc = compute_accuracy(
-                predictions[1], batch.label.long())
+            batch = {k: v.to(device) for k, v in batch.items()}
+            model = turn_on_dropout(model)
+            predictions = np.array(stats([model(**batch)[0] for sample in range(T)])[0])
+            acc = compute_accuracy(predictions, batch['labels'].long())
             average_acc += batch_acc
-            average_loss += float(loss.item())
 
     f = open(f"{hydra.utils.get_original_cwd()}{os.path.sep}accuracy.txt", "a")
     f.write(str(average_acc / len(dataloader)))
     f.write(" ")
     f.close()
-
     return (average_acc / len(dataloader)), (average_loss / len(dataloader))
 
+def turn_on_dropout(model):
+    for i, m in enumerate(model.modules()):
+        if m.__class__.__name__.startswith('Dropout'):
+            model.modules()[i].training = True   # Turn on dropout
+    return model
