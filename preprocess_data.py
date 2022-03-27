@@ -4,7 +4,16 @@ import numpy as np
 
 tokenizer = transformers.AutoTokenizer.from_pretrained('bert-base-cased')
 
-def load_data():
+def load_s140():
+    print("Loading dataset...")
+    dataset_split = datasets.load_dataset('sentiment140')
+    print(dataset_split)
+    dataset_split = dataset_split.map(tokenize, batched=True)
+    dataset_split = dataset_split.map(lambda examples: {'labels': examples['sentiment']}, batched=True)
+    print(dataset_split)
+    return 
+    
+def load_tweet_eval():
     print("Loading dataset...")
     dataset_split = datasets.load_dataset('tweet_eval', 'sentiment')
     print(dataset_split)

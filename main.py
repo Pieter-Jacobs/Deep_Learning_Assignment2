@@ -29,16 +29,17 @@ def init_dataloaders(cfg, train_ds, val_ds, test_ds, device):
 @hydra.main(config_path=os.getcwd(), config_name="config.yaml")
 def main(cfg: DictConfig):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    dataset, train_ds, test_ds, val_ds = preprocess.load_data()
-    model = load_untrained_bert()
-    # model = load_trained_bert()
-    train_dataloader, val_dataloader, test_dataloader = init_dataloaders(
-        cfg, train_ds, test_ds, val_ds, device)
-    model.to(device)
-    optimizer = torch.optim.AdamW(
-        params=model.parameters(), lr=cfg.lr, eps=cfg.eps)
+    preprocess.load_s140()
+    # dataset, train_ds, test_ds, val_ds = preprocess.load_tweet_eval()
+    # model = load_untrained_bert()
+    # # model = load_trained_bert()
+    # train_dataloader, val_dataloader, test_dataloader = init_dataloaders(
+    #     cfg, train_ds, test_ds, val_ds, device)
+    # model.to(device)
+    # optimizer = torch.optim.AdamW(
+    #     params=model.parameters(), lr=cfg.lr, eps=cfg.eps)
 
-    train(model=model, optimizer=optimizer, cfg=cfg, train_dataloader=train_dataloader, val_dataloader=val_dataloader, device=device)
+    # train(model=model, optimizer=optimizer, cfg=cfg, train_dataloader=train_dataloader, val_dataloader=val_dataloader, device=device)
     # labels = extract_labels(val)
     # plot_hist(labels)
     # embeddings = compute_embeddings([ex['text'] for ex in list(val)])
