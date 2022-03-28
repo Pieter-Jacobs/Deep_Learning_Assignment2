@@ -20,6 +20,7 @@ def load_untrained_bert():
     model = transformers.BertForSequenceClassification(config)
     return model
 
+
 def load_trained_bert():
     model = transformers.BertForSequenceClassification.from_pretrained(
         # Use the 12-layer BERT model, with an uncased vocab.
@@ -29,6 +30,7 @@ def load_trained_bert():
         output_hidden_states=False,
     )
     return model
+
 
 def train(model, optimizer, cfg, train_dataloader, val_dataloader, device):
     """
@@ -63,7 +65,7 @@ def train(model, optimizer, cfg, train_dataloader, val_dataloader, device):
         model.load_state_dict(torch.load(
             f"{hydra.utils.get_original_cwd()}{os.path.sep}saves{os.path.sep}model_early_stopping_{str(epoch)}.pkl"))
         optimizer.params = torch.optim.AdamW(
-            model.parameters(), lr=cfg.lr, eps=cfg.eps)
+            model.parameters())
 
 
 def training_step(model, dataloader, optimizer, device):
@@ -129,6 +131,7 @@ def compute_accuracy(predictions, y):
 def compute_f1():
     pass
 
+
 def evaluate(model, dataloader, T):
     """
     Makes evaluation steps corresponding to the amount of epochs and prints the loss and accuracy
@@ -144,7 +147,8 @@ def evaluate(model, dataloader, T):
         for batch in dataloader:
             batch = {k: v.to(device) for k, v in batch.items()}
             model = turn_on_dropout(model)
-            predictions = np.array(stats([model(**batch)[0] for sample in range(T)])[0])
+            predictions = np.array(
+                stats([model(**batch)[0] for sample in range(T)])[0])
             acc = compute_accuracy(predictions, batch['labels'].long())
             average_acc += batch_acc
 
@@ -153,6 +157,7 @@ def evaluate(model, dataloader, T):
     f.write(" ")
     f.close()
     return (average_acc / len(dataloader)), (average_loss / len(dataloader))
+
 
 def turn_on_dropout(model):
     for i, m in enumerate(model.modules()):

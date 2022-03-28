@@ -3,40 +3,63 @@ import numpy as np
 
 
 tokenizer = transformers.AutoTokenizer.from_pretrained('bert-base-cased')
+print(dir(tokenizer))
+
+def s140_to_tweet_eval(label):
+    label_mapping = {
+        0: 0,
+        2: 1,
+        4: 2
+    }
+    return label_mapping[label]
+
+
+def load_tweet_eval():
+    dataset = datasets.load_dataset('tweet_eval', 'sentiment')
+    dataset = dataset.rename_column('label', 'labels')
+    dataset = datasets.concatenate_datasets(list(dataset.values()))
+    print(dataset[0])
+    print(dataset)
+    return dataset
 
 def load_s140():
     print("Loading dataset...")
-    dataset_split = datasets.load_dataset('sentiment140')
-    print(dataset_split)
-    dataset_split = dataset_split.map(tokenize, batched=True)
-    dataset_split = dataset_split.map(lambda examples: {'labels': examples['sentiment']}, batched=True)
-    print(dataset_split)
-    return 
-    
-def load_tweet_eval():
-    print("Loading dataset...")
-    dataset_split = datasets.load_dataset('tweet_eval', 'sentiment')
-    print(dataset_split)
-    dataset_split = dataset_split.map(tokenize, batched=True)
-    dataset_split = dataset_split.map(lambda examples: {'labels': examples['label']}, batched=True)
-    dataset_split.set_format(type='torch', columns=['input_ids', 'token_type_ids', 'attention_mask', 'labels'])
-    dataset_full = datasets.concatenate_datasets(list(dataset_split.values()))
-    train, test, val = list(dataset_split.values())
-    return dataset_full, train, test, val
+    s140 = datasets.load_dataset('sentiment140')
+    s140 = s140.map(lambda examples: {'labels': [
+                                      s140_to_tweet_eval(label) for label in examples['sentiment']]}, batched=True)
+    s140 = s140.remove_columns(
+        ["sentiment", "user", "date", "query"])
+    dataset = datasets.concatenate_datasets(list(s140.values()))
+    return dataset
 
-def extract_labels(dataset):
-    labels_int = [ex['label'] for ex in list(dataset)]
-    labels = dataset.features['label'].int2str(labels_int)
-    capitalized_labels = [label.capitalize() for label in labels]
-    return capitalized_labels
+def train_test_val_split(dataset):
+    train_test = dataset.train_test_split(test_size=0.1)
+    test_valid = train_test['test'].train_test_split(test_size=0.5)
+    dataset = datasets.DatasetDict({
+        'train': train_test['train'],
+        'test': test_valid['test'],
+        'valid': test_valid['train']})
+    return dataset
 
-def plot_hist(y):
+def generalise_dataset(dataset):
+    dataset = dataset.map(tokenize, batched=True)
+    dataset.set_format(type='torch', columns=[
+                       'input_ids', 'token_type_ids', 'attention_mask', 'labels'])
+    return dataset
+
+def plot_hist_and_get_counts(y):
     """Plot vertical histogram with count values"""
     g = sns.displot(y=y, discrete=True, legend=False,
                     shrink=0.8, palette=['g', 'y', 'r'], hue=y, linewidth=0)
-    annotate_bars(g)
-    plt.savefig(f"img{os.sep}class_distribution.pdf")
+    plt.legend(["Negative", "Neutral", "Positive"])
+    plt.yticks([], [])
+    counts = annotate_bars(g)
+    plt.savefig(
+        f"{hydra.utils.get_original_cwd()}{os.sep}img{os.sep}class_distribution.pdf")
+    plt.show()
     plt.close()
+    return counts
+
 
 def plot_scatter(X, y):
     """Plot a 2D scatterplot"""
@@ -47,9 +70,10 @@ def plot_scatter(X, y):
     plt.show()
     plt.close()
 
+
 def compute_embeddings(texts):
     print("Computing embeddings...")
-    pca = PCA(n_components = 2)
+    pca = PCA(n_components=2)
     embeddings = []
     sentenceTransformer = SentenceTransformer(
         'all-mpnet-base-v2')
@@ -62,15 +86,17 @@ def compute_embeddings(texts):
     embeddings = pca.fit_transform(embeddings)
     return embeddings
 
+
 def annotate_bars(plot):
     """Annotate the bars of a histogram with their count"""
+    counts = []
     for ax in plot.axes.ravel():
         for p in ax.patches[2:7:2]:
+            counts.append(p.get_width())
             ax.annotate(text=p.get_width(), xy=(
                 p.get_width() + 1, p.get_y() + p.get_height()/2))
+    return counts
 
-def create_fields():
-    pass
 
 def tokenize(example):
     return tokenizer(example['text'], padding='max_length')

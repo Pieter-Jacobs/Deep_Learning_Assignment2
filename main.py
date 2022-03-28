@@ -29,21 +29,40 @@ def init_dataloaders(cfg, train_ds, val_ds, test_ds, device):
 @hydra.main(config_path=os.getcwd(), config_name="config.yaml")
 def main(cfg: DictConfig):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    preprocess.load_s140()
-    # dataset, train_ds, test_ds, val_ds = preprocess.load_tweet_eval()
-    # model = load_untrained_bert()
-    # # model = load_trained_bert()
-    # train_dataloader, val_dataloader, test_dataloader = init_dataloaders(
-    #     cfg, train_ds, test_ds, val_ds, device)
-    # model.to(device)
-    # optimizer = torch.optim.AdamW(
-    #     params=model.parameters(), lr=cfg.lr, eps=cfg.eps)
 
-    # train(model=model, optimizer=optimizer, cfg=cfg, train_dataloader=train_dataloader, val_dataloader=val_dataloader, device=device)
-    # labels = extract_labels(val)
-    # plot_hist(labels)
+    dataset_tweet_eval = preprocess.load_tweet_eval() 
+    dataset_s140 = preprocess.load_s140()
+
+    
+    counts = preprocess.plot_hist_and_get_counts(dataset_tweet_eval['labels'])
+    neg_s140 = dataset_s140.filter(lambda e: e['labels'] == 0)
+    pos_s140 = dataset_s140.filter(lambda e: e['labels'] == 2)
+    preprocess.plot_hist_and_get_counts(dataset_s140['labels'])
+
+    imbalance = counts[np.argmax(counts)] - counts
+    s140_for_balancing = datasets.concatenate_datasets([neg_s140.select(range(0,imbalance[2])), pos_s140.select(range(0, imbalance[0]))])
+
+    dataset_tweet_eval = dataset_tweet_eval.cast(s140_for_balancing.features)
+    dataset = datasets.concatenate_datasets([dataset_tweet_eval, s140_for_balancing])
+    dataset = preprocess.generalise_dataset(dataset)
+    print(dataset)
+    preprocess.plot_hist_and_get_counts(dataset['labels'])
+
+    dataset = preprocess.train_test_val_split(dataset)
+    print(dataset)
     # embeddings = compute_embeddings([ex['text'] for ex in list(val)])
     # plot_scatter(embeddings, labels)
+
+    # model = load_untrained_bert()
+    # model = load_trained_bert()
+    # model.to(device)
+
+    # train_dataloader, val_dataloader, test_dataloader = init_dataloaders(
+    #     cfg, train_ds, test_ds, val_ds, device)
+    # optimizer = torch.optim.AdamW(
+    #     params=model.parameters())
+
+    # train(model=model, optimizer=optimizer, cfg=cfg, train_dataloader=train_dataloader, val_dataloader=val_dataloader, device=device)
     pass
 
 
