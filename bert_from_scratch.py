@@ -5,7 +5,7 @@ import numpy as np
 def write_to_file(folder, file, text):
     f = open(f"{hydra.utils.get_original_cwd()}{os.path.sep}evaluation_data{os.path.sep}{folder}{os.path.sep}{file}", "a")
     f.write(text)
-    if "\n" in text:
+    if "\n" not in text:
         f.write(" ")
     f.close()
 
@@ -124,7 +124,8 @@ def validation_step(model, dataloader, device):
             batch = {k: v.to(device) for k, v in batch.items()}
             predictions = model(**batch)
             loss = predictions[0]
-            acc = accuracy_score(batch['labels'].long(), predictions[1])
+            acc = accuracy_score(batch['labels'].cpu().detach().numpy(), np.argmax(
+                predictions[1].cpu().detach().numpy(), axis=1))
             average_acc += acc
             epoch_loss += float(loss.item())
     return (average_acc / len(dataloader)), (epoch_loss / len(dataloader))
@@ -137,39 +138,44 @@ def evaluate(model, dataloader, device, pretrained, dropout, T=None):
     avg_loss: float
         Average loss of the model predictions
     """
-    model.eval()
     average_acc = 0
     average_acc_mcd = 0
     with torch.no_grad():
         for batch in dataloader:
+
             batch = {k: v.to(device) for k, v in batch.items()}
 
-            predictions = model(**batch)[0]
-            batch_acc = accuracy_score(batch['labels'].long(), predictions)
+            model.eval()
+            predictions = model(**batch)[1]
+            batch_acc = accuracy_score(batch['labels'].cpu().detach().numpy(), np.argmax(
+                predictions.cpu().detach().numpy(), axis=1))
             average_acc += batch_acc
 
             if dropout > 0:
                 model = turn_on_dropout(model)
+                predictions_mcd = np.argmax(np.array(
+                    [model(**batch)[1].cpu().detach().numpy() for sample in range(T)]), axis=2)
                 predictions_mcd = np.array(
-                    stats.mode([model(**batch)[0] for sample in range(T)])[0])
+                    stats.mode(predictions_mcd)[0])
+                print(predictions_mcd)
                 batch_acc_mcd = accuracy_score(
-                    batch['labels'].long(), predictions_mcd)
+                    batch['labels'].cpu().detach().numpy(), predictions_mcd)
                 average_acc_mcd += batch_acc_mcd
 
     folder = "pretrained" if pretrained else "untrained"
     folder = folder + \
         f"{os.sep}normal" if dropout == 0 else folder + f"{os.sep}dropout"
+    write_to_file(folder, "test_accuracy.txt",
+                  f"{average_acc / len(dataloader)}\n")
 
-    write_to_file(folder, "test_accuracy.txt", str(
-        average_acc / len(dataloader) + "\n"))
     if dropout > 0:
-        write_to_file(folder, "test_accuracy_mcd.txt", str(
-            average_acc_mcd / len(dataloader) + "\n"))
+        write_to_file(folder, "test_accuracy_mcd.txt",
+                      f"{average_acc_mcd / len(dataloader)}\n")
     return (average_acc / len(dataloader))
 
 
 def turn_on_dropout(model):
-    for i, m in enumerate(model.modules()):
+    for m in model.modules():
         if m.__class__.__name__.startswith('Dropout'):
-            model.modules()[i].training = True   # Turn on dropout
+            m.training = True   # Turn on dropout
     return model

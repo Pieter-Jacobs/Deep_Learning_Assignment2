@@ -65,7 +65,6 @@ def plot_scatter(X, y, filename):
     plt.legend(["Negative", "Neutral", "Positive"])
     plt.xlabel("Component 1")
     plt.ylabel("Component 2")
-    plt.show()
     plt.savefig(
         f"{hydra.utils.get_original_cwd()}{os.sep}img{os.sep}data_distribution_{filename}.pdf")
     plt.close()
