@@ -10,18 +10,18 @@ torch.backends.cudnn.benchmark = False
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 
 
-def init_dataloaders(cfg, train_ds, val_ds, test_ds, device):
+def init_dataloaders(dataset, batch_size):
     train_loader = torch.utils.data.DataLoader(
-        dataset=train_ds,
-        batch_size=cfg.batch_size
+        dataset=dataset['train'],
+        batch_size=batch_size
     )
     val_loader = torch.utils.data.DataLoader(
-        dataset=val_ds,
-        batch_size=cfg.batch_size
+        dataset=dataset['validation'],
+        batch_size=batch_size
     )
     test_loader = torch.utils.data.DataLoader(
-        dataset=test_ds,
-        batch_size=cfg.batch_size
+        dataset=dataset['test'],
+        batch_size=batch_size
     )
     return train_loader, val_loader, test_loader
 
@@ -29,42 +29,48 @@ def init_dataloaders(cfg, train_ds, val_ds, test_ds, device):
 @hydra.main(config_path=os.getcwd(), config_name="config.yaml")
 def main(cfg: DictConfig):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-    dataset_tweet_eval = preprocess.load_tweet_eval() 
+    dataset_tweet_eval, split = preprocess.load_tweet_eval()
     dataset_s140 = preprocess.load_s140()
 
-    
-    counts = preprocess.plot_hist_and_get_counts(dataset_tweet_eval['labels'])
+    counts = preprocess.plot_hist_and_get_counts(
+        dataset_tweet_eval['labels'], "tweet_eval")
     neg_s140 = dataset_s140.filter(lambda e: e['labels'] == 0)
     pos_s140 = dataset_s140.filter(lambda e: e['labels'] == 2)
-    preprocess.plot_hist_and_get_counts(dataset_s140['labels'])
+    preprocess.plot_hist_and_get_counts(dataset_s140['labels'], "s140")
 
     imbalance = counts[np.argmax(counts)] - counts
-    s140_for_balancing = datasets.concatenate_datasets([neg_s140.select(range(0,imbalance[2])), pos_s140.select(range(0, imbalance[0]))])
+    s140_for_balancing = datasets.concatenate_datasets([neg_s140.select(
+        range(0, imbalance[2])), pos_s140.select(range(0, imbalance[0]))])
 
     dataset_tweet_eval = dataset_tweet_eval.cast(s140_for_balancing.features)
-    dataset = datasets.concatenate_datasets([dataset_tweet_eval, s140_for_balancing])
+    dataset = datasets.concatenate_datasets(
+        [dataset_tweet_eval, s140_for_balancing])
+
+    dataset = dataset.select(range(0,100))
+
+    embeddings = preprocess.compute_embeddings(
+        [ex['text'] for ex in list(dataset)])
+    preprocess.plot_scatter(embeddings, dataset['labels'], "embeddings")
+
     dataset = preprocess.generalise_dataset(dataset)
-    print(dataset)
-    preprocess.plot_hist_and_get_counts(dataset['labels'])
 
-    dataset = preprocess.train_test_val_split(dataset)
-    print(dataset)
-    # embeddings = compute_embeddings([ex['text'] for ex in list(val)])
-    # plot_scatter(embeddings, labels)
+    preprocess.plot_hist_and_get_counts(dataset['labels'], "generalised")
+    
 
-    # model = load_untrained_bert()
-    # model = load_trained_bert()
-    # model.to(device)
+    dataset = preprocess.train_test_val_split(dataset, split)
 
-    # train_dataloader, val_dataloader, test_dataloader = init_dataloaders(
-    #     cfg, train_ds, test_ds, val_ds, device)
-    # optimizer = torch.optim.AdamW(
-    #     params=model.parameters())
+    model = load_pretrained_bert(cfg.dropout) if cfg.pretrained_bert else load_untrained_bert(cfg.dropout)
+    model.to(device)
 
-    # train(model=model, optimizer=optimizer, cfg=cfg, train_dataloader=train_dataloader, val_dataloader=val_dataloader, device=device)
-    pass
+    train_loader, val_loader, test_loader = init_dataloaders(
+        dataset, cfg.batch_size)
+    optimizer = torch.optim.AdamW(
+        params=model.parameters())
 
+    for run in range(cfg.runs):
+        print(f"Run: {run}")
+        train(model, train_loader, val_loader, optimizer, device, cfg.epochs, cfg.pretrained_bert)
+        evaluate(model, test_loader, device, cfg.pretrained_bert, cfg.mcd, cfg.T)
 
 if __name__ == '__main__':
     main()

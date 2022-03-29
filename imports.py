@@ -3,9 +3,10 @@ import torch
 import seaborn as sns
 import os
 import matplotlib.pyplot as plt
+import nltk
 from sentence_transformers import SentenceTransformer
-from nltk import tokenize
 from sklearn.decomposition import PCA
+from sklearn.metrics import accuracy_score
 import transformers
 import dill
 import hydra

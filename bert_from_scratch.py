@@ -2,47 +2,45 @@ from imports import *
 import numpy as np
 
 
-def load_untrained_bert():
+def write_to_file(folder, file, text):
+    f = open(f"{hydra.utils.get_original_cwd()}{os.path.sep}evaluation_data{os.path.sep}{folder}{os.path.sep}{file}", "a")
+    f.write(text)
+    if "\n" in text:
+        f.write(" ")
+    f.close()
+
+
+def load_untrained_bert(dropout):
     config = transformers.BertConfig.from_pretrained('bert-base-uncased')
     config.num_labels = 3
-    # config = transformers.BertConfig(
-    # vocab_size=2048,
-    # max_position_embeddings=768,
-    # intermediate_size=2048,
-    # hidden_size=512,
-    # num_attention_heads=8,
-    # num_hidden_layers=6,
-    # type_vocab_size=5,
-    # hidden_dropout_prob=0.1,
-    # attention_probs_dropout_prob=0.1,
-    # num_labels=3,
-    # )
+    config.hidden_dropout_prob = dropout,
+    config.attention_probs_dropout_prob = dropout
     model = transformers.BertForSequenceClassification(config)
     return model
 
 
-def load_trained_bert():
+def load_pretrained_bert(dropout):
     model = transformers.BertForSequenceClassification.from_pretrained(
         # Use the 12-layer BERT model, with an uncased vocab.
         "bert-base-uncased",
         num_labels=3,
         output_attentions=False,
         output_hidden_states=False,
+        hidden_dropout_prob=dropout,
+        attention_probs_dropout_prob=dropout
     )
     return model
 
 
-def train(model, optimizer, cfg, train_dataloader, val_dataloader, device):
+def train(model, train_dataloader, val_dataloader, optimizer, device, epochs, pretrained, dropout):
     """
     Trains the model for the chosen amount of epochs using early stopping
     Parameters:
     -----------
     """
-    loss = []
-    acc = []
-    val_losses = []
+
     print("Starting training...")
-    for epoch in range(cfg.n_epochs):
+    for epoch in range(epochs):
         print("Epoch number: " + str(epoch))
         torch.save(model.state_dict(
         ), f"{hydra.utils.get_original_cwd()}{os.path.sep}saves{os.path.sep}model_early_stopping_{str(epoch)}.pkl")
@@ -57,15 +55,28 @@ def train(model, optimizer, cfg, train_dataloader, val_dataloader, device):
         print(
             f'\tVal Loss: {val_loss:.3f} | Val Acc: {val_acc*100:.2f}%')
 
-        loss.append(train_loss)
-        acc.append(train_acc)
-        val_losses.append(val_loss)
+        folder = "pretrained" if pretrained else "untrained"
+        folder = folder + \
+            f"{os.sep}normal" if dropout == 0 else folder + f"{os.sep}dropout"
+
+        write_to_file(folder, "train_accuracy.txt", str(train_acc))
+        write_to_file(folder, "train_loss.txt", str(train_loss))
+        write_to_file(folder, "val_accuracy.txt", str(val_acc))
+        write_to_file(folder, "val_loss.txt", str(val_loss))
 
         # Load the parameters of the model with the lowest validation loss
         model.load_state_dict(torch.load(
             f"{hydra.utils.get_original_cwd()}{os.path.sep}saves{os.path.sep}model_early_stopping_{str(epoch)}.pkl"))
         optimizer.params = torch.optim.AdamW(
             model.parameters())
+
+    write_to_file(folder, "train_accuracy.txt", "\n")
+    write_to_file(folder, "train_loss.txt", "\n")
+    write_to_file(folder, "val_accuracy.txt", "\n")
+    write_to_file(folder, "val_loss.txt", "\n")
+    print("Training finished")
+
+    return model
 
 
 def training_step(model, dataloader, optimizer, device):
@@ -86,7 +97,8 @@ def training_step(model, dataloader, optimizer, device):
         batch = {k: v.to(device) for k, v in batch.items()}
         predictions = model(**batch)
         loss = predictions[0]
-        acc = compute_accuracy(predictions[1], batch['labels'].long())
+        acc = accuracy_score(batch['labels'].cpu().detach().numpy(), np.argmax(
+            predictions[1].cpu().detach().numpy(), axis=1))
         loss.backward()
         optimizer.step()
         epoch_loss += float(loss.item())
@@ -112,27 +124,13 @@ def validation_step(model, dataloader, device):
             batch = {k: v.to(device) for k, v in batch.items()}
             predictions = model(**batch)
             loss = predictions[0]
-            acc = compute_accuracy(predictions[1], batch['labels'].long())
+            acc = accuracy_score(batch['labels'].long(), predictions[1])
             average_acc += acc
             epoch_loss += float(loss.item())
     return (average_acc / len(dataloader)), (epoch_loss / len(dataloader))
 
 
-def compute_accuracy(predictions, y):
-    """Computes the accuracy of the made predictions, so it can be printed"""
-    correct = 0.0
-    for i, pred in enumerate(predictions):
-        # Check if prediction is the same as supervised label
-        if torch.tensor(np.argmax(pred.detach().cpu().numpy())) == y[i].cpu().item():
-            correct += 1
-    return correct / len(predictions)
-
-
-def compute_f1():
-    pass
-
-
-def evaluate(model, dataloader, T):
+def evaluate(model, dataloader, device, pretrained, dropout, T=None):
     """
     Makes evaluation steps corresponding to the amount of epochs and prints the loss and accuracy
     Returns:
@@ -141,22 +139,33 @@ def evaluate(model, dataloader, T):
     """
     model.eval()
     average_acc = 0
-    average_loss = 0
-
+    average_acc_mcd = 0
     with torch.no_grad():
         for batch in dataloader:
             batch = {k: v.to(device) for k, v in batch.items()}
-            model = turn_on_dropout(model)
-            predictions = np.array(
-                stats([model(**batch)[0] for sample in range(T)])[0])
-            acc = compute_accuracy(predictions, batch['labels'].long())
+
+            predictions = model(**batch)[0]
+            batch_acc = accuracy_score(batch['labels'].long(), predictions)
             average_acc += batch_acc
 
-    f = open(f"{hydra.utils.get_original_cwd()}{os.path.sep}accuracy.txt", "a")
-    f.write(str(average_acc / len(dataloader)))
-    f.write(" ")
-    f.close()
-    return (average_acc / len(dataloader)), (average_loss / len(dataloader))
+            if dropout > 0:
+                model = turn_on_dropout(model)
+                predictions_mcd = np.array(
+                    stats.mode([model(**batch)[0] for sample in range(T)])[0])
+                batch_acc_mcd = accuracy_score(
+                    batch['labels'].long(), predictions_mcd)
+                average_acc_mcd += batch_acc_mcd
+
+    folder = "pretrained" if pretrained else "untrained"
+    folder = folder + \
+        f"{os.sep}normal" if dropout == 0 else folder + f"{os.sep}dropout"
+
+    write_to_file(folder, "test_accuracy.txt", str(
+        average_acc / len(dataloader) + "\n"))
+    if dropout > 0:
+        write_to_file(folder, "test_accuracy_mcd.txt", str(
+            average_acc_mcd / len(dataloader) + "\n"))
+    return (average_acc / len(dataloader))
 
 
 def turn_on_dropout(model):
