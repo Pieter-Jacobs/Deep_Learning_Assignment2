@@ -11,10 +11,11 @@ def write_to_file(folder, file, text):
 
 
 def load_untrained_bert(dropout):
-    config = transformers.BertConfig.from_pretrained('bert-base-uncased')
-    config.num_labels = 3
-    config.hidden_dropout_prob = dropout,
-    config.attention_probs_dropout_prob = dropout
+    config = transformers.BertConfig(
+        hidden_dropout_prob=dropout,
+        attention_probs_dropout_prob=dropout,
+        num_labels=3,
+    )
     model = transformers.BertForSequenceClassification(config)
     return model
 
@@ -38,6 +39,7 @@ def train(model, train_dataloader, val_dataloader, optimizer, device, epochs, pr
     Parameters:
     -----------
     """
+    val_losses = []
 
     print("Starting training...")
     for epoch in range(epochs):
@@ -49,7 +51,7 @@ def train(model, train_dataloader, val_dataloader, optimizer, device, epochs, pr
             model=model, dataloader=train_dataloader, optimizer=optimizer, device=device)
         val_acc, val_loss = validation_step(
             model=model, dataloader=val_dataloader, device=device)
-
+        val_losses.append(val_loss)
         print(
             f'\tTrain Loss: {train_loss:.3f} | Train Acc: {train_acc*100:.2f}%')
         print(
@@ -64,11 +66,12 @@ def train(model, train_dataloader, val_dataloader, optimizer, device, epochs, pr
         write_to_file(folder, "val_accuracy.txt", str(val_acc))
         write_to_file(folder, "val_loss.txt", str(val_loss))
 
-        # Load the parameters of the model with the lowest validation loss
-        model.load_state_dict(torch.load(
-            f"{hydra.utils.get_original_cwd()}{os.path.sep}saves{os.path.sep}model_early_stopping_{str(epoch)}.pkl"))
-        optimizer.params = torch.optim.AdamW(
-            model.parameters())
+    # Load the parameters of the model with the lowest validation loss
+    print(str(np.argmin(val_losses)))
+    model.load_state_dict(torch.load(
+        f"{hydra.utils.get_original_cwd()}{os.path.sep}saves{os.path.sep}model_early_stopping_{str(np.argmin(val_losses))}.pkl"))
+    optimizer.params = torch.optim.AdamW(
+        model.parameters())
 
     write_to_file(folder, "train_accuracy.txt", "\n")
     write_to_file(folder, "train_loss.txt", "\n")
@@ -150,16 +153,14 @@ def evaluate(model, dataloader, device, pretrained, dropout, T=None):
             batch_acc = accuracy_score(batch['labels'].cpu().detach().numpy(), np.argmax(
                 predictions.cpu().detach().numpy(), axis=1))
             average_acc += batch_acc
-
             if dropout > 0:
                 model = turn_on_dropout(model)
                 predictions_mcd = np.argmax(np.array(
                     [model(**batch)[1].cpu().detach().numpy() for sample in range(T)]), axis=2)
                 predictions_mcd = np.array(
                     stats.mode(predictions_mcd)[0])
-                print(predictions_mcd)
                 batch_acc_mcd = accuracy_score(
-                    batch['labels'].cpu().detach().numpy(), predictions_mcd)
+                    batch['labels'].cpu().detach().numpy(), predictions_mcd.flatten())
                 average_acc_mcd += batch_acc_mcd
 
     folder = "pretrained" if pretrained else "untrained"

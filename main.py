@@ -28,8 +28,8 @@ def init_dataloaders(dataset, batch_size):
 
 @hydra.main(config_path=os.getcwd(), config_name="config.yaml")
 def main(cfg: DictConfig):
-    #device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    device = torch.device("cpu")
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
     dataset_tweet_eval, split = preprocess.load_tweet_eval()
     dataset_s140 = preprocess.load_s140()
 
@@ -47,7 +47,7 @@ def main(cfg: DictConfig):
     dataset = datasets.concatenate_datasets(
         [dataset_tweet_eval, s140_for_balancing])
 
-    dataset = dataset.select(range(0, 100))
+    #dataset = dataset.select(range(0, 100))
 
     # embeddings = preprocess.compute_embeddings(
     #     [ex['text'] for ex in list(dataset)])
@@ -58,7 +58,6 @@ def main(cfg: DictConfig):
     preprocess.plot_hist_and_get_counts(dataset['labels'], "generalised")
 
     dataset = preprocess.train_test_val_split(dataset, split)
-
     model = load_pretrained_bert(
         cfg.dropout) if cfg.pretrained_bert else load_untrained_bert(cfg.dropout)
     model.to(device)
@@ -73,7 +72,7 @@ def main(cfg: DictConfig):
         train(model=model, train_dataloader=train_loader, val_dataloader=val_loader, optimizer=optimizer,
               device=device, epochs=cfg.epochs, pretrained=cfg.pretrained_bert, dropout=cfg.dropout)
         evaluate(model=model, dataloader=test_loader, device=device, pretrained=cfg.pretrained_bert,
-                dropout=cfg.dropout, T=cfg.T)
+                 dropout=cfg.dropout, T=cfg.T)
 
 
 if __name__ == '__main__':

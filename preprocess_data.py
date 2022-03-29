@@ -3,6 +3,7 @@ from imports import *
 import numpy as np
 tokenizer = transformers.AutoTokenizer.from_pretrained('bert-base-uncased')
 
+
 def s140_to_tweet_eval(label):
     label_mapping = {
         0: 0,
@@ -14,11 +15,13 @@ def s140_to_tweet_eval(label):
 
 def load_tweet_eval():
     dataset = datasets.load_dataset('tweet_eval', 'sentiment')
-    split = [dataset['train'].num_rows, dataset['test'].num_rows, dataset['validation'].num_rows]
+    split = [dataset['train'].num_rows,
+             dataset['test'].num_rows, dataset['validation'].num_rows]
     split = np.divide(split, np.sum(split))
     dataset = dataset.rename_column('label', 'labels')
     dataset = datasets.concatenate_datasets(list(dataset.values()))
     return dataset, split
+
 
 def load_s140():
     print("Loading dataset...")
@@ -30,6 +33,7 @@ def load_s140():
     dataset = datasets.concatenate_datasets(list(s140.values()))
     return dataset
 
+
 def train_test_val_split(dataset, split):
     train_test = dataset.train_test_split(test_size=split[1] + split[2])
     test_valid = train_test['test'].train_test_split(test_size=split[1])
@@ -39,11 +43,13 @@ def train_test_val_split(dataset, split):
         'validation': test_valid['test']})
     return dataset
 
+
 def generalise_dataset(dataset):
     dataset = dataset.map(tokenize, batched=True)
     dataset.set_format(type='torch', columns=[
                        'input_ids', 'token_type_ids', 'attention_mask', 'labels'])
     return dataset
+
 
 def plot_hist_and_get_counts(y, filename):
     """Plot vertical histogram with count values"""
