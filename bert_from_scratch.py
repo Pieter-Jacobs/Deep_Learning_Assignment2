@@ -3,7 +3,7 @@ import numpy as np
 
 
 def write_to_file(folder, file, text):
-    f = open(f"{hydra.utils.get_original_cwd()}{os.path.sep}evaluation_data{os.path.sep}{folder}{os.path.sep}{file}", "a")
+    f = open(f"{folder}{os.path.sep}{file}", "a")
     f.write(text)
     if "\n" not in text:
         f.write(" ")
@@ -56,8 +56,9 @@ def train(model, train_dataloader, val_dataloader, optimizer, device, epochs, pr
             f'\tTrain Loss: {train_loss:.3f} | Train Acc: {train_acc*100:.2f}%')
         print(
             f'\tVal Loss: {val_loss:.3f} | Val Acc: {val_acc*100:.2f}%')
-
-        folder = "pretrained" if pretrained else "untrained"
+        
+        folder = f"{hydra.utils.get_original_cwd()}{os.path.sep}evaluation_data{os.path.sep}"
+        folder += "pretrained" if pretrained else "untrained"
         folder = folder + \
             f"{os.sep}normal" if dropout == 0 else folder + f"{os.sep}dropout"
 
@@ -67,12 +68,10 @@ def train(model, train_dataloader, val_dataloader, optimizer, device, epochs, pr
         write_to_file(folder, "val_loss.txt", str(val_loss))
 
     # Load the parameters of the model with the lowest validation loss
-    print(str(np.argmin(val_losses)))
     model.load_state_dict(torch.load(
         f"{hydra.utils.get_original_cwd()}{os.path.sep}saves{os.path.sep}model_early_stopping_{str(np.argmin(val_losses))}.pkl"))
     optimizer.params = torch.optim.AdamW(
         model.parameters())
-
     write_to_file(folder, "train_accuracy.txt", "\n")
     write_to_file(folder, "train_loss.txt", "\n")
     write_to_file(folder, "val_accuracy.txt", "\n")
@@ -141,6 +140,8 @@ def evaluate(model, dataloader, device, pretrained, dropout, T=None):
     avg_loss: float
         Average loss of the model predictions
     """
+    confusion_matrix = np.zeros((3, 3))
+    confusion_matrix_mcd = np.zeros((3, 3))
     average_acc = 0
     average_acc_mcd = 0
     with torch.no_grad():
@@ -150,29 +151,50 @@ def evaluate(model, dataloader, device, pretrained, dropout, T=None):
 
             model.eval()
             predictions = model(**batch)[1]
-            batch_acc = accuracy_score(batch['labels'].cpu().detach().numpy(), np.argmax(
-                predictions.cpu().detach().numpy(), axis=1))
+            predictions = np.argmax(
+                predictions.cpu().detach().numpy(), axis=1)
+            confusion_matrix = update_confusion_matrix(
+                confusion_matrix, predictions, batch['labels'].cpu().detach().numpy())
+            batch_acc = accuracy_score(
+                batch['labels'].cpu().detach().numpy(), predictions)
             average_acc += batch_acc
+
             if dropout > 0:
                 model = turn_on_dropout(model)
                 predictions_mcd = np.argmax(np.array(
                     [model(**batch)[1].cpu().detach().numpy() for sample in range(T)]), axis=2)
                 predictions_mcd = np.array(
                     stats.mode(predictions_mcd)[0])
+                confusion_matrix_mcd = update_confusion_matrix(
+                    confusion_matrix_mcd, predictions_mcd.flatten(), batch['labels'].cpu().detach().numpy())
                 batch_acc_mcd = accuracy_score(
                     batch['labels'].cpu().detach().numpy(), predictions_mcd.flatten())
                 average_acc_mcd += batch_acc_mcd
 
-    folder = "pretrained" if pretrained else "untrained"
+    folder = f"{hydra.utils.get_original_cwd()}{os.path.sep}evaluation_data{os.path.sep}"
+    folder += "pretrained" if pretrained else "untrained"
     folder = folder + \
-        f"{os.sep}normal" if dropout == 0 else folder + f"{os.sep}dropout"
+        f"{os.path.sep}normal" if dropout == 0 else folder + f"{os.sep}dropout"
     write_to_file(folder, "test_accuracy.txt",
                   f"{average_acc / len(dataloader)}\n")
+    with open(f"{folder}{os.path.sep}confusion_matrix.txt", "ab") as f:
+        np.savetxt(f, confusion_matrix, fmt='%d', footer="\n")
 
     if dropout > 0:
         write_to_file(folder, "test_accuracy_mcd.txt",
                       f"{average_acc_mcd / len(dataloader)}\n")
+        with open(f"{folder}{os.path.sep}confusion_matrix_mcd.txt", "ab") as f:
+            np.savetxt(f, confusion_matrix_mcd, fmt='%d', footer="\n")
     return (average_acc / len(dataloader))
+
+
+def update_confusion_matrix(confusion_matrix, predictions, labels):
+    """
+    Updates the confusion matrix based on the predictions and the labels
+    """
+    for i in range(len(predictions)):
+        confusion_matrix[labels[i], predictions[i]] += 1
+    return confusion_matrix
 
 
 def turn_on_dropout(model):
