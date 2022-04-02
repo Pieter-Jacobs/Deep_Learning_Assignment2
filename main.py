@@ -47,8 +47,6 @@ def main(cfg: DictConfig):
     dataset = datasets.concatenate_datasets(
         [dataset_tweet_eval, s140_for_balancing])
 
-    #dataset = dataset.select(range(0, 100))
-
     # embeddings = preprocess.compute_embeddings(
     #     [ex['text'] for ex in list(dataset)])
     # preprocess.plot_scatter(embeddings, dataset['labels'], "embeddings")
@@ -58,19 +56,18 @@ def main(cfg: DictConfig):
     preprocess.plot_hist_and_get_counts(dataset['labels'], "generalised")
 
     dataset = preprocess.train_test_val_split(dataset, split)
-    model = load_pretrained_bert(
-        cfg.dropout) if cfg.pretrained_bert else load_untrained_bert(cfg.dropout)
-    model.to(device)
-
     train_loader, val_loader, test_loader = init_dataloaders(
         dataset, cfg.batch_size)
-    optimizer = torch.optim.AdamW(
-        params=model.parameters())
 
     for run in range(cfg.runs):
         print(f"Run: {run}")
-        train(model=model, train_dataloader=train_loader, val_dataloader=val_loader, optimizer=optimizer,
-              device=device, epochs=cfg.epochs, pretrained=cfg.pretrained_bert, dropout=cfg.dropout)
+        model = load_pretrained_bert(
+            cfg.dropout) if cfg.pretrained_bert else load_untrained_bert(cfg.dropout)
+        model.to(device)
+        optimizer = torch.optim.AdamW(
+            params=model.parameters(), lr=cfg.lr)
+        model = train(model=model, train_dataloader=train_loader, val_dataloader=val_loader, optimizer=optimizer,
+                      device=device, epochs=cfg.epochs, pretrained=cfg.pretrained_bert, dropout=cfg.dropout)
         evaluate(model=model, dataloader=test_loader, device=device, pretrained=cfg.pretrained_bert,
                  dropout=cfg.dropout, T=cfg.T)
 

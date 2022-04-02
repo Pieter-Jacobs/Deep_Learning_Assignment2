@@ -1,6 +1,7 @@
 runs: 10
 epochs: 15
-batch_size: 16
+batch_size: 32
 pretrained_bert: 0
 T: 10
 dropout: 0.5
+lr: 1e-5
