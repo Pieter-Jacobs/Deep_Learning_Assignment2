@@ -5,6 +5,7 @@ tokenizer = transformers.AutoTokenizer.from_pretrained('bert-base-uncased')
 
 
 def s140_to_tweet_eval(label):
+    """Convert the Sentiment140 labels to TweetEval labels"""
     label_mapping = {
         0: 0,
         2: 1,
@@ -14,6 +15,7 @@ def s140_to_tweet_eval(label):
 
 
 def load_tweet_eval():
+    """Load the TweetEval dataset and return the original split ratio"""
     dataset = datasets.load_dataset('tweet_eval', 'sentiment')
     split = [dataset['train'].num_rows,
              dataset['test'].num_rows, dataset['validation'].num_rows]
@@ -24,6 +26,7 @@ def load_tweet_eval():
 
 
 def load_s140():
+    """Load the Sentiment140 dataset"""
     print("Loading dataset...")
     s140 = datasets.load_dataset('sentiment140')
     s140 = s140.map(lambda examples: {'labels': [
@@ -35,6 +38,7 @@ def load_s140():
 
 
 def train_test_val_split(dataset, split):
+    """Split the dataset into train, test and validation datasets"""
     train_test = dataset.train_test_split(test_size=split[1] + split[2])
     test_valid = train_test['test'].train_test_split(test_size=split[1])
     dataset = datasets.DatasetDict({
@@ -45,38 +49,15 @@ def train_test_val_split(dataset, split):
 
 
 def generalise_dataset(dataset):
+    """Generalise the dataset to pytorch format"""
     dataset = dataset.map(tokenize, batched=True)
     dataset.set_format(type='torch', columns=[
                        'input_ids', 'token_type_ids', 'attention_mask', 'labels'])
     return dataset
 
 
-def plot_hist_and_get_counts(y, filename):
-    """Plot vertical histogram with count values"""
-    g = sns.displot(y=y, discrete=True, legend=False,
-                    shrink=0.8, palette=['g', 'y', 'r'], hue=y, linewidth=0)
-    plt.legend(["Negative", "Neutral", "Positive"])
-    plt.yticks([], [])
-    counts = annotate_bars(g)
-    plt.savefig(
-        f"{hydra.utils.get_original_cwd()}{os.sep}img{os.sep}class_distribution_{filename}.pdf")
-    plt.close()
-    return counts
-
-
-def plot_scatter(X, y, filename):
-    """Plot a 2D scatterplot"""
-    sns.scatterplot(x=[ex[0] for ex in X], y=[
-                    ex[1] for ex in X], palette=['y', 'g', 'r'], hue=y, style=y).set(title='Text embeddings')
-    plt.legend(["Negative", "Neutral", "Positive"])
-    plt.xlabel("Component 1")
-    plt.ylabel("Component 2")
-    plt.savefig(
-        f"{hydra.utils.get_original_cwd()}{os.sep}img{os.sep}data_distribution_{filename}.pdf")
-    plt.close()
-
-
 def compute_embeddings(texts):
+    """Compute the embeddings for a list of texts and reduce them to a 2D vector"""
     print("Computing embeddings...")
     pca = PCA(n_components=2)
     embeddings = []
@@ -92,16 +73,23 @@ def compute_embeddings(texts):
     return embeddings
 
 
-def annotate_bars(plot):
-    """Annotate the bars of a histogram with their count"""
-    counts = []
-    for ax in plot.axes.ravel():
-        for p in ax.patches[2:7:2]:
-            counts.append(p.get_width())
-            ax.annotate(text=p.get_width(), xy=(
-                p.get_width() + 1, p.get_y() + p.get_height()/2))
-    return counts
-
-
 def tokenize(example):
+    """Tokenize the input text"""
     return tokenizer(example['text'], padding='max_length')
+
+
+def init_dataloaders(dataset, batch_size):
+    """Initialise the dataloaders for the dataset splits"""
+    train_loader = torch.utils.data.DataLoader(
+        dataset=dataset['train'],
+        batch_size=batch_size
+    )
+    val_loader = torch.utils.data.DataLoader(
+        dataset=dataset['validation'],
+        batch_size=batch_size
+    )
+    test_loader = torch.utils.data.DataLoader(
+        dataset=dataset['test'],
+        batch_size=batch_size
+    )
+    return train_loader, val_loader, test_loader

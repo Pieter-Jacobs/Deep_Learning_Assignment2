@@ -11,3 +11,4 @@ hydra-core
 omegaconf
 torchtext
 pandas
+scipy

@@ -2,15 +2,8 @@ from imports import *
 import numpy as np
 
 
-def write_to_file(folder, file, text):
-    f = open(f"{folder}{os.path.sep}{file}", "a")
-    f.write(text)
-    if "\n" not in text:
-        f.write(" ")
-    f.close()
-
-
 def load_untrained_bert(dropout):
+    """Load the untrained bert model"""
     config = transformers.BertConfig(
         hidden_dropout_prob=dropout,
         attention_probs_dropout_prob=dropout,
@@ -21,6 +14,7 @@ def load_untrained_bert(dropout):
 
 
 def load_pretrained_bert(dropout):
+    """Load the pretrained bert model"""
     model = transformers.BertForSequenceClassification.from_pretrained(
         # Use the 12-layer BERT model, with an uncased vocab.
         "bert-base-uncased",
@@ -38,7 +32,28 @@ def train(model, train_dataloader, val_dataloader, optimizer, device, epochs, pr
     Trains the model for the chosen amount of epochs using early stopping
     Parameters:
     -----------
+    model: transformers.BertForSequenceClassification
+        The model to be trained
+    train_dataloader: torch.utils.data.DataLoader
+        The dataloader for the training set
+    val_dataloader: torch.utils.data.DataLoader
+        The dataloader for the validation set
+    optimizer: torch.optim
+        The optimizer to be used for training
+    device: torch.device
+        The device to be used for training
+    epochs: int
+        The amount of epochs to be trained
+    pretrained: bool
+        Whether the model is pretrained or not
+    dropout: float
+        The dropout rate to be used
+    Returns:
+    --------
+    model: transformers.BertForSequenceClassification
+        The trained model
     """
+
     val_losses = []
 
     print("Starting training...")
@@ -52,11 +67,12 @@ def train(model, train_dataloader, val_dataloader, optimizer, device, epochs, pr
         val_acc, val_loss = validation_step(
             model=model, dataloader=val_dataloader, device=device)
         val_losses.append(val_loss)
+
         print(
             f'\tTrain Loss: {train_loss:.3f} | Train Acc: {train_acc*100:.2f}%')
         print(
             f'\tVal Loss: {val_loss:.3f} | Val Acc: {val_acc*100:.2f}%')
-        
+
         folder = f"{hydra.utils.get_original_cwd()}{os.path.sep}evaluation_data{os.path.sep}"
         folder += "pretrained" if pretrained else "untrained"
         folder = folder + \
@@ -72,6 +88,7 @@ def train(model, train_dataloader, val_dataloader, optimizer, device, epochs, pr
         f"{hydra.utils.get_original_cwd()}{os.path.sep}saves{os.path.sep}model_early_stopping_{str(np.argmin(val_losses))}.pkl"))
     optimizer.params = torch.optim.AdamW(
         model.parameters())
+
     write_to_file(folder, "train_accuracy.txt", "\n")
     write_to_file(folder, "train_loss.txt", "\n")
     write_to_file(folder, "val_accuracy.txt", "\n")
@@ -136,17 +153,33 @@ def validation_step(model, dataloader, device):
 def evaluate(model, dataloader, device, pretrained, dropout, T=None):
     """
     Makes evaluation steps corresponding to the amount of epochs and prints the loss and accuracy
+    Parameters:
+    -----------
+    model: transformers.BertForSequenceClassification
+        The model to be evaluated
+    dataloader: torch.utils.data.DataLoader
+        The dataloader for the evaluation set
+    device: torch.device
+        The device to be used for evaluation
+    pretrained: bool
+        Whether the model is pretrained or not
+    dropout: float
+        The dropout rate to be used
+    T: int
+        The amount of stochastic forward passes to make for MCD
+
     Returns:
-    avg_loss: float
-        Average loss of the model predictions
+    --------
+    average_acc / len(dataloader): float
+        Average accuracy of the model predictions
     """
     confusion_matrix = np.zeros((3, 3))
     confusion_matrix_mcd = np.zeros((3, 3))
     average_acc = 0
     average_acc_mcd = 0
+
     with torch.no_grad():
         for batch in dataloader:
-
             batch = {k: v.to(device) for k, v in batch.items()}
 
             model.eval()
@@ -159,6 +192,7 @@ def evaluate(model, dataloader, device, pretrained, dropout, T=None):
                 batch['labels'].cpu().detach().numpy(), predictions)
             average_acc += batch_acc
 
+            # Use MCD if dropout is turned on
             if dropout > 0:
                 model = turn_on_dropout(model)
                 predictions_mcd = np.argmax(np.array(
@@ -189,16 +223,24 @@ def evaluate(model, dataloader, device, pretrained, dropout, T=None):
 
 
 def update_confusion_matrix(confusion_matrix, predictions, labels):
-    """
-    Updates the confusion matrix based on the predictions and the labels
-    """
+    """Updates the confusion matrix based on the predictions and the labels"""
     for i in range(len(predictions)):
         confusion_matrix[labels[i], predictions[i]] += 1
     return confusion_matrix
 
 
 def turn_on_dropout(model):
+    """Turns on dropout for all layers in the model"""
     for m in model.modules():
         if m.__class__.__name__.startswith('Dropout'):
             m.training = True   # Turn on dropout
     return model
+
+
+def write_to_file(folder, file, text):
+    """Write text to a file"""
+    f = open(f"{folder}{os.path.sep}{file}", "a")
+    f.write(text)
+    if "\n" not in text:
+        f.write(" ")
+    f.close()
